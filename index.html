@@ -1206,7 +1206,7 @@
       els.locationStatus.textContent = source === 'browser'
         ? `Localização aproximada, com precisão de ${precision.toLocaleString('pt-BR')} m. Resultados ordenados por proximidade.`
         : `Localização definida como ${label}. Resultados ordenados por proximidade.`;
-      renderMarkers();
+      renderResults(filteredData());
       map.flyTo(latlng, Math.max(map.getZoom(), 15), { duration: 0.8 });
     }
 
@@ -1242,7 +1242,7 @@
         map.removeLayer(state.locationAccuracy);
         state.locationAccuracy = null;
       }
-      renderMarkers();
+      renderResults(filteredData());
     }
 
     function locationError(error) {
