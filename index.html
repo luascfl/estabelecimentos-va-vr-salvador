@@ -104,6 +104,49 @@
       font: 700 20px/34px Avenir Next, Segoe UI, Verdana, sans-serif;
     }
 
+    .current-location-control {
+      margin: 0 14px 10px 0;
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(15, 31, 28, 0.18);
+    }
+
+    .current-location-control button {
+      display: grid;
+      width: 34px;
+      height: 34px;
+      place-items: center;
+      border: 0;
+      border-radius: 0;
+      padding: 0;
+      background: white;
+    }
+
+    .current-location-control button:hover {
+      background: #fff8ec;
+      transform: none;
+    }
+
+    .current-location-glyph {
+      position: relative;
+      width: 15px;
+      height: 15px;
+      border: 2px solid var(--food);
+      border-radius: 50%;
+    }
+
+    .current-location-glyph::after {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 3px;
+      height: 3px;
+      border-radius: 50%;
+      background: var(--food);
+      content: "";
+      transform: translate(-50%, -50%);
+    }
+
     .leaflet-popup {
       position: absolute;
       text-align: center;
@@ -817,6 +860,20 @@
     map.fitBounds(salvadorBounds);
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
+    const currentLocationControl = L.control({ position: 'bottomright' });
+    currentLocationControl.onAdd = () => {
+      const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control current-location-control');
+      const button = L.DomUtil.create('button', '', container);
+      button.type = 'button';
+      button.title = 'Voltar para minha localização';
+      button.setAttribute('aria-label', 'Voltar para minha localização');
+      button.innerHTML = '<span class="current-location-glyph" aria-hidden="true"></span>';
+      L.DomEvent.disableClickPropagation(container);
+      L.DomEvent.on(button, 'click', returnToCurrentLocation);
+      return container;
+    };
+    currentLocationControl.addTo(map);
+
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: '&copy; OpenStreetMap contributors'
@@ -1275,6 +1332,19 @@
         },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
+    }
+
+    function returnToCurrentLocation(event) {
+      L.DomEvent.stop(event);
+      userInteracted = true;
+      if (state.location && state.locationSource === 'browser') {
+        refreshMapSize();
+        map.flyTo(state.location, Math.max(map.getZoom(), 15), { duration: 0.8 });
+        state.locationMarker.openPopup();
+        return;
+      }
+      els.toggleLocation.checked = true;
+      requestCurrentLocation();
     }
 
     async function searchManualLocation(event) {
