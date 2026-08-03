@@ -842,6 +842,14 @@
 
   <main id="map" aria-label="Mapa de estabelecimentos com VA e/ou VR em Salvador"></main>
 
+  <div class="map-action-dock" aria-label="Controles do mapa">
+    <button id="returnToLocation" class="map-action-button" type="button" title="Voltar para minha localização" aria-label="Voltar para minha localização">
+      <span class="map-action-glyph" aria-hidden="true"><span></span></span>
+    </button>
+    <button id="zoomIn" class="map-action-button" type="button" title="Aumentar zoom" aria-label="Aumentar zoom">+</button>
+    <button id="zoomOut" class="map-action-button" type="button" title="Diminuir zoom" aria-label="Diminuir zoom">−</button>
+  </div>
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   <script>
@@ -879,35 +887,9 @@
     const salvadorBounds = L.latLngBounds([[-13.04, -38.57], [-12.84, -38.28]]);
     const map = L.map('map', { preferCanvas: true, zoomControl: false });
     map.fitBounds(salvadorBounds);
-    const mapActionDock = L.control({ position: 'bottomright' });
-    mapActionDock.onAdd = () => {
-      const container = L.DomUtil.create('div', 'leaflet-control map-action-dock');
-      const addButton = (label, content, handler) => {
-        const button = L.DomUtil.create('button', 'map-action-button', container);
-        button.type = 'button';
-        button.title = label;
-        button.setAttribute('aria-label', label);
-        button.innerHTML = content;
-        L.DomEvent.on(button, 'click', handler);
-      };
-
-      addButton(
-        'Voltar para minha localização',
-        '<span class="map-action-glyph" aria-hidden="true"><span></span></span>',
-        returnToCurrentLocation
-      );
-      addButton('Aumentar zoom', '+', (event) => {
-        L.DomEvent.stop(event);
-        map.zoomIn();
-      });
-      addButton('Diminuir zoom', '−', (event) => {
-        L.DomEvent.stop(event);
-        map.zoomOut();
-      });
-      L.DomEvent.disableClickPropagation(container);
-      return container;
-    };
-    mapActionDock.addTo(map);
+    document.getElementById('returnToLocation').addEventListener('click', returnToCurrentLocation);
+    document.getElementById('zoomIn').addEventListener('click', () => map.zoomIn());
+    document.getElementById('zoomOut').addEventListener('click', () => map.zoomOut());
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
