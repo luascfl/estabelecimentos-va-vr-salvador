@@ -85,65 +85,74 @@
     .leaflet-bottom { bottom: 0; }
     .leaflet-left { left: 0; }
 
-    .leaflet-control-zoom {
-      margin: 0 14px 14px 0;
-      border-radius: 14px;
-      overflow: hidden;
-      box-shadow: 0 10px 30px rgba(15, 31, 28, 0.18);
-    }
-
-    .leaflet-control-zoom a {
-      display: block;
-      width: 34px;
-      height: 34px;
-      line-height: 34px;
-      background: white;
-      color: var(--ink);
-      text-align: center;
-      text-decoration: none;
-      font: 700 20px/34px Avenir Next, Segoe UI, Verdana, sans-serif;
-    }
-
-    .current-location-control {
-      margin: 0 14px 10px 0;
-      border-radius: 14px;
-      overflow: hidden;
-      box-shadow: 0 10px 30px rgba(15, 31, 28, 0.18);
-    }
-
-    .current-location-control button {
+    .map-action-dock {
       display: grid;
-      width: 34px;
-      height: 34px;
+      overflow: hidden;
+      margin: 0 18px 18px 0;
+      border: 1px solid rgba(15, 31, 28, 0.14);
+      border-radius: 16px;
+      background: rgba(255, 252, 243, 0.96);
+      box-shadow: 0 14px 34px rgba(15, 31, 28, 0.24);
+    }
+
+    .map-action-button {
+      display: grid;
+      width: 46px;
+      height: 46px;
       place-items: center;
       border: 0;
+      border-bottom: 1px solid rgba(15, 31, 28, 0.12);
       border-radius: 0;
       padding: 0;
-      background: white;
+      background: transparent;
+      color: var(--ink);
+      font: 800 25px/1 Georgia, Cambria, serif;
     }
 
-    .current-location-control button:hover {
-      background: #fff8ec;
+    .map-action-button:last-child { border-bottom: 0; }
+
+    .map-action-button:hover {
+      background: rgba(32, 122, 76, 0.12);
+      color: var(--food);
       transform: none;
     }
 
-    .current-location-glyph {
+    .map-action-button:focus-visible {
+      outline: 3px solid rgba(32, 122, 76, 0.52);
+      outline-offset: -3px;
+    }
+
+    .map-action-glyph {
       position: relative;
-      width: 15px;
-      height: 15px;
+      width: 21px;
+      height: 21px;
       border: 2px solid var(--food);
       border-radius: 50%;
     }
 
-    .current-location-glyph::after {
+    .map-action-glyph::before,
+    .map-action-glyph::after {
       position: absolute;
       top: 50%;
       left: 50%;
-      width: 3px;
-      height: 3px;
-      border-radius: 50%;
+      width: 31px;
+      height: 2px;
+      border-radius: 999px;
       background: var(--food);
       content: "";
+      transform: translate(-50%, -50%);
+    }
+
+    .map-action-glyph::after { transform: translate(-50%, -50%) rotate(90deg); }
+
+    .map-action-glyph span {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--food);
       transform: translate(-50%, -50%);
     }
 
@@ -858,21 +867,35 @@
     const salvadorBounds = L.latLngBounds([[-13.04, -38.57], [-12.84, -38.28]]);
     const map = L.map('map', { preferCanvas: true, zoomControl: false });
     map.fitBounds(salvadorBounds);
-    L.control.zoom({ position: 'bottomright' }).addTo(map);
+    const mapActionDock = L.control({ position: 'bottomright' });
+    mapActionDock.onAdd = () => {
+      const container = L.DomUtil.create('div', 'leaflet-control map-action-dock');
+      const addButton = (label, content, handler) => {
+        const button = L.DomUtil.create('button', 'map-action-button', container);
+        button.type = 'button';
+        button.title = label;
+        button.setAttribute('aria-label', label);
+        button.innerHTML = content;
+        L.DomEvent.on(button, 'click', handler);
+      };
 
-    const currentLocationControl = L.control({ position: 'bottomright' });
-    currentLocationControl.onAdd = () => {
-      const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control current-location-control');
-      const button = L.DomUtil.create('button', '', container);
-      button.type = 'button';
-      button.title = 'Voltar para minha localização';
-      button.setAttribute('aria-label', 'Voltar para minha localização');
-      button.innerHTML = '<span class="current-location-glyph" aria-hidden="true"></span>';
+      addButton(
+        'Voltar para minha localização',
+        '<span class="map-action-glyph" aria-hidden="true"><span></span></span>',
+        returnToCurrentLocation
+      );
+      addButton('Aumentar zoom', '+', (event) => {
+        L.DomEvent.stop(event);
+        map.zoomIn();
+      });
+      addButton('Diminuir zoom', '−', (event) => {
+        L.DomEvent.stop(event);
+        map.zoomOut();
+      });
       L.DomEvent.disableClickPropagation(container);
-      L.DomEvent.on(button, 'click', returnToCurrentLocation);
       return container;
     };
-    currentLocationControl.addTo(map);
+    mapActionDock.addTo(map);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
