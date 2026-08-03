@@ -1332,12 +1332,31 @@
 
     function locationError(error) {
       const messages = {
-        [error.PERMISSION_DENIED]: 'Permissão de localização negada. Informe seu bairro ou endereço abaixo.',
-        [error.POSITION_UNAVAILABLE]: 'Sua localização não está disponível no momento. Informe seu bairro ou endereço abaixo.',
-        [error.TIMEOUT]: 'A localização demorou demais. Informe seu bairro ou endereço abaixo.'
+        1: 'Permissão de localização negada. Informe seu bairro ou endereço abaixo.',
+        2: 'Sua localização não está disponível no momento. Informe seu bairro ou endereço abaixo.',
+        3: 'A localização demorou demais. Informe seu bairro ou endereço abaixo.'
       };
       els.locationStatus.textContent = messages[error.code] || 'Não foi possível obter sua localização.';
       showManualLocationSearch();
+    }
+
+    function retryApproximateLocation(error, requestId) {
+      if (error.code !== 2 && error.code !== 3) {
+        locationError(error);
+        return;
+      }
+
+      els.locationModeLabel.textContent = 'Localizando aproximadamente…';
+      els.locationStatus.textContent = 'Não foi possível confirmar uma posição precisa. Tentando uma localização aproximada.';
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          if (state.locationRequestId === requestId && els.toggleLocation.checked) showCurrentLocation(position);
+        },
+        (fallbackError) => {
+          if (state.locationRequestId === requestId) locationError(fallbackError);
+        },
+        { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 }
+      );
     }
 
     function requestCurrentLocation() {
@@ -1356,7 +1375,7 @@
           if (state.locationRequestId === requestId && els.toggleLocation.checked) showCurrentLocation(position);
         },
         (error) => {
-          if (state.locationRequestId === requestId) locationError(error);
+          if (state.locationRequestId === requestId) retryApproximateLocation(error, requestId);
         },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
