@@ -605,6 +605,53 @@
       line-height: 1.3;
     }
 
+    .location-mode {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      min-height: 34px;
+    }
+
+    .location-mode label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--ink);
+      cursor: pointer;
+      font-size: 0.76rem;
+      font-weight: 800;
+    }
+
+    .location-mode input {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--food);
+    }
+
+    .location-search {
+      display: flex;
+      gap: 6px;
+    }
+
+    .location-search[hidden] { display: none; }
+
+    .location-search input { min-width: 0; }
+
+    .location-results {
+      display: grid;
+      gap: 5px;
+    }
+
+    .location-result {
+      border-radius: 12px;
+      padding: 7px 9px;
+      color: var(--muted);
+      font-size: 0.68rem;
+      line-height: 1.25;
+      text-align: left;
+    }
+
     .result-distance {
       display: block;
       margin-top: 3px;
@@ -699,9 +746,18 @@
         <button id="fitMap" type="button">Enquadrar Salvador</button>
         <button id="toggleCoverage" type="button">Mostrar lacunas</button>
       </div>
-      <div class="toggle-row">
-        <button id="useLocation" type="button">Usar minha localização</button>
+      <div class="location-mode">
+        <label for="toggleLocation">
+          <input id="toggleLocation" type="checkbox">
+          <span id="locationModeLabel">Usar localização atual</span>
+        </label>
+        <button id="chooseLocation" type="button" aria-expanded="false">Alterar local</button>
       </div>
+      <form class="location-search" id="locationSearchForm" hidden>
+        <input id="locationSearch" type="search" placeholder="Onde você está?" autocomplete="street-address">
+        <button id="locationSearchSubmit" type="submit">Buscar</button>
+      </form>
+      <div class="location-results" id="locationResults" aria-live="polite"></div>
       <div class="coverage-status" id="coverageStatus"></div>
       <div class="location-status" id="locationStatus" role="status" aria-live="polite"></div>
     </div>
@@ -743,6 +799,7 @@
       location: null,
       locationMarker: null,
       locationAccuracy: null,
+      locationSource: null,
       markers: L.markerClusterGroup({
         chunkedLoading: true,
         maxClusterRadius: 46,
@@ -789,8 +846,13 @@
       filterAll: document.getElementById('filterAll'),
       filterFood: document.getElementById('filterFood'),
       filterMeal: document.getElementById('filterMeal'),
-      fitMap: document.getElementById('fitMap'),
-      useLocation: document.getElementById('useLocation'),
+      toggleLocation: document.getElementById('toggleLocation'),
+      locationModeLabel: document.getElementById('locationModeLabel'),
+      chooseLocation: document.getElementById('chooseLocation'),
+      locationSearchForm: document.getElementById('locationSearchForm'),
+      locationSearch: document.getElementById('locationSearch'),
+      locationSearchSubmit: document.getElementById('locationSearchSubmit'),
+      locationResults: document.getElementById('locationResults'),
       locationStatus: document.getElementById('locationStatus'),
       toggleCoverage: document.getElementById('toggleCoverage'),
       coverageStatus: document.getElementById('coverageStatus'),
@@ -1090,11 +1152,22 @@
       return `${(distance / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} km de você`;
     }
 
-    function showCurrentLocation(position) {
-      const { latitude, longitude, accuracy } = position.coords;
+    function locationPopup(latlng, { source, label, precision }) {
+      const sourceText = source === 'browser'
+        ? 'Fornecida pelo navegador.'
+        : `Definida manualmente: ${escapeHtml(label)}.`;
+      const precisionText = precision
+        ? `<br>Precisão: ${precision.toLocaleString('pt-BR')} m`
+        : '';
+      return `<strong>Localização considerada</strong><br>${sourceText}<br>Latitude: ${latlng.lat.toFixed(6)}<br>Longitude: ${latlng.lng.toFixed(6)}${precisionText}`;
+    }
+
+    function setLocation({ latitude, longitude, source, label, precision = null }) {
       const latlng = L.latLng(latitude, longitude);
-      const precision = Math.max(1, Math.round(accuracy));
       state.location = latlng;
+      state.locationSource = source;
+      const popup = locationPopup(latlng, { source, label, precision });
+      const tooltip = source === 'browser' ? 'Sua localização' : 'Localização definida';
 
       if (!state.locationMarker) {
         state.locationMarker = L.circleMarker(latlng, {
@@ -1103,52 +1176,153 @@
           weight: 2,
           fillColor: '#fff8ec',
           fillOpacity: 1
-        }).bindTooltip('Sua localização', { direction: 'top', offset: [0, -8] }).addTo(map);
-        state.locationAccuracy = L.circle(latlng, {
-          radius: precision,
-          color: '#207a4c',
-          weight: 1,
-          opacity: 0.45,
-          fillColor: '#207a4c',
-          fillOpacity: 0.08,
-          interactive: false
-        }).addTo(map);
+        }).bindTooltip(tooltip, { direction: 'top', offset: [0, -8] }).bindPopup(popup).addTo(map);
       } else {
         state.locationMarker.setLatLng(latlng);
-        state.locationAccuracy.setLatLng(latlng).setRadius(precision);
+        state.locationMarker.setTooltipContent(tooltip);
+        state.locationMarker.setPopupContent(popup);
       }
 
-      els.locationStatus.textContent = `Localização aproximada, com precisão de ${precision.toLocaleString('pt-BR')} m. Resultados ordenados por proximidade.`;
-      els.useLocation.disabled = false;
-      els.useLocation.textContent = 'Atualizar minha localização';
+      if (precision) {
+        if (!state.locationAccuracy) {
+          state.locationAccuracy = L.circle(latlng, {
+            radius: precision,
+            color: '#207a4c',
+            weight: 1,
+            opacity: 0.45,
+            fillColor: '#207a4c',
+            fillOpacity: 0.08,
+            interactive: false
+          }).addTo(map);
+        } else {
+          state.locationAccuracy.setLatLng(latlng).setRadius(precision);
+        }
+      } else if (state.locationAccuracy) {
+        map.removeLayer(state.locationAccuracy);
+        state.locationAccuracy = null;
+      }
+
+      els.locationStatus.textContent = source === 'browser'
+        ? `Localização aproximada, com precisão de ${precision.toLocaleString('pt-BR')} m. Resultados ordenados por proximidade.`
+        : `Localização definida como ${label}. Resultados ordenados por proximidade.`;
       renderMarkers();
       map.flyTo(latlng, Math.max(map.getZoom(), 15), { duration: 0.8 });
     }
 
+    function showCurrentLocation(position) {
+      const { latitude, longitude, accuracy } = position.coords;
+      const precision = Math.max(1, Math.round(accuracy));
+      els.toggleLocation.disabled = false;
+      els.toggleLocation.checked = true;
+      els.locationModeLabel.textContent = 'Usando sua localização atual';
+      els.locationSearchForm.hidden = true;
+      els.chooseLocation.setAttribute('aria-expanded', 'false');
+      els.locationResults.replaceChildren();
+      setLocation({ latitude, longitude, source: 'browser', label: 'Sua localização atual', precision });
+    }
+
+    function showManualLocationSearch() {
+      els.toggleLocation.checked = false;
+      els.toggleLocation.disabled = false;
+      els.locationModeLabel.textContent = 'Usar localização atual';
+      els.locationSearchForm.hidden = false;
+      els.chooseLocation.setAttribute('aria-expanded', 'true');
+      els.locationSearch.focus();
+    }
+
+    function clearLocation() {
+      state.location = null;
+      state.locationSource = null;
+      if (state.locationMarker) {
+        map.removeLayer(state.locationMarker);
+        state.locationMarker = null;
+      }
+      if (state.locationAccuracy) {
+        map.removeLayer(state.locationAccuracy);
+        state.locationAccuracy = null;
+      }
+      renderMarkers();
+    }
+
     function locationError(error) {
       const messages = {
-        [error.PERMISSION_DENIED]: 'Permissão de localização negada. Permita o acesso no navegador para usar este recurso.',
-        [error.POSITION_UNAVAILABLE]: 'Sua localização não está disponível no momento. Tente novamente.',
-        [error.TIMEOUT]: 'A localização demorou demais. Tente novamente.'
+        [error.PERMISSION_DENIED]: 'Permissão de localização negada. Informe seu bairro ou endereço abaixo.',
+        [error.POSITION_UNAVAILABLE]: 'Sua localização não está disponível no momento. Informe seu bairro ou endereço abaixo.',
+        [error.TIMEOUT]: 'A localização demorou demais. Informe seu bairro ou endereço abaixo.'
       };
       els.locationStatus.textContent = messages[error.code] || 'Não foi possível obter sua localização.';
-      els.useLocation.disabled = false;
-      els.useLocation.textContent = 'Usar minha localização';
+      showManualLocationSearch();
     }
 
     function requestCurrentLocation() {
       if (!navigator.geolocation) {
-        els.locationStatus.textContent = 'Este navegador não oferece suporte à localização.';
+        els.locationStatus.textContent = 'Este navegador não oferece suporte à localização. Informe seu bairro ou endereço abaixo.';
+        showManualLocationSearch();
         return;
       }
-      els.useLocation.disabled = true;
-      els.useLocation.textContent = 'Localizando…';
+      els.toggleLocation.disabled = true;
+      els.locationModeLabel.textContent = 'Localizando…';
       els.locationStatus.textContent = 'Solicitando sua localização ao navegador.';
-      navigator.geolocation.getCurrentPosition(showCurrentLocation, locationError, {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 60000
-      });
+      const requestId = (state.locationRequestId || 0) + 1;
+      state.locationRequestId = requestId;
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          if (state.locationRequestId === requestId && els.toggleLocation.checked) showCurrentLocation(position);
+        },
+        (error) => {
+          if (state.locationRequestId === requestId) locationError(error);
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+      );
+    }
+
+    async function searchManualLocation(event) {
+      event.preventDefault();
+      const query = els.locationSearch.value.trim();
+      if (query.length < 3) {
+        els.locationResults.textContent = 'Digite pelo menos três caracteres.';
+        return;
+      }
+
+      els.locationSearchSubmit.disabled = true;
+      els.locationResults.textContent = 'Buscando locais em Salvador…';
+      try {
+        const parameters = new URLSearchParams({
+          format: 'jsonv2',
+          limit: '5',
+          countrycodes: 'br',
+          bounded: '1',
+          viewbox: '-38.57,-12.84,-38.28,-13.04',
+          q: `${query}, Salvador, Bahia`
+        });
+        const response = await fetch(`https://nominatim.openstreetmap.org/search?${parameters}`);
+        if (!response.ok) throw new Error(`Busca indisponível: ${response.status}`);
+        const places = await response.json();
+        if (!places.length) {
+          els.locationResults.textContent = 'Nenhum local encontrado em Salvador. Tente bairro, rua ou ponto de referência.';
+          return;
+        }
+        els.locationResults.innerHTML = places.map((place) => `
+          <button class="location-result" type="button" data-lat="${escapeHtml(place.lat)}" data-lng="${escapeHtml(place.lon)}" data-label="${escapeHtml(place.display_name)}">${escapeHtml(place.display_name)}</button>
+        `).join('');
+      } catch {
+        els.locationResults.textContent = 'Não foi possível buscar o local agora. Tente novamente.';
+      } finally {
+        els.locationSearchSubmit.disabled = false;
+      }
+    }
+
+    function selectManualLocation(event) {
+      const option = event.target.closest('.location-result');
+      if (!option) return;
+      const latitude = Number(option.dataset.lat);
+      const longitude = Number(option.dataset.lng);
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+      const label = option.dataset.label;
+      els.locationResults.replaceChildren();
+      els.locationSearchForm.hidden = true;
+      els.chooseLocation.setAttribute('aria-expanded', 'false');
+      setLocation({ latitude, longitude, source: 'manual', label });
     }
 
     function renderCoverageLayer() {
@@ -1289,7 +1463,26 @@
     els.filterFood.addEventListener('click', () => { userInteracted = true; setBenefitFilter('food'); });
     els.filterMeal.addEventListener('click', () => { userInteracted = true; setBenefitFilter('meal'); });
     els.fitMap.addEventListener('click', () => { userInteracted = true; fitSalvador(); });
-    els.useLocation.addEventListener('click', () => { userInteracted = true; requestCurrentLocation(); });
+    els.toggleLocation.addEventListener('change', () => {
+      userInteracted = true;
+      if (els.toggleLocation.checked) {
+        requestCurrentLocation();
+      } else {
+        state.locationRequestId = (state.locationRequestId || 0) + 1;
+        clearLocation();
+        showManualLocationSearch();
+        els.locationStatus.textContent = 'Informe seu bairro, rua ou ponto de referência em Salvador.';
+      }
+    });
+    els.chooseLocation.addEventListener('click', () => {
+      userInteracted = true;
+      state.locationRequestId = (state.locationRequestId || 0) + 1;
+      clearLocation();
+      showManualLocationSearch();
+      els.locationStatus.textContent = 'Informe seu bairro, rua ou ponto de referência em Salvador.';
+    });
+    els.locationSearchForm.addEventListener('submit', searchManualLocation);
+    els.locationResults.addEventListener('click', selectManualLocation);
     els.toggleCoverage.addEventListener('click', () => { userInteracted = true; toggleCoverageLayer(); });
     updateCoverageStatus();
 
