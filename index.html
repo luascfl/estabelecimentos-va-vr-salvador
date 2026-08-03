@@ -86,17 +86,19 @@
     .leaflet-left { left: 0; }
 
     .map-action-dock {
-      width: 46px;
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      z-index: 2000;
       display: grid;
+      width: 46px;
       overflow: hidden;
-      margin: 0 18px 18px 0;
+      margin: 0;
       border: 1px solid rgba(15, 31, 28, 0.14);
       border-radius: 16px;
       background: rgba(255, 252, 243, 0.96);
       box-shadow: 0 14px 34px rgba(15, 31, 28, 0.24);
     }
-
-    .leaflet-right .map-action-dock { float: right; }
 
     .map-action-button {
       display: grid;
