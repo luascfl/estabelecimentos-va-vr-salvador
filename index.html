@@ -1273,7 +1273,7 @@
         (error) => {
           if (state.locationRequestId === requestId) locationError(error);
         },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
     }
 
