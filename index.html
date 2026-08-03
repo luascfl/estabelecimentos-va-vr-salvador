@@ -849,6 +849,7 @@
     const PONTOS_BUSCA = [{"nome":"Humaitá","lat":-12.9314,"lng":-38.5194},{"nome":"Pelourinho","lat":-12.9718,"lng":-38.5082},{"nome":"Santo Antônio","lat":-12.9669,"lng":-38.5033},{"nome":"Barra","lat":-13.0104,"lng":-38.5328},{"nome":"Rio Vermelho","lat":-13.0145,"lng":-38.4876},{"nome":"Brotas","lat":-12.9806,"lng":-38.4862},{"nome":"Federação","lat":-13.0007,"lng":-38.507},{"nome":"Garcia","lat":-12.9917,"lng":-38.5165},{"nome":"Canela","lat":-12.9939,"lng":-38.5222},{"nome":"Graça","lat":-13.0009,"lng":-38.521},{"nome":"Ondina","lat":-13.0062,"lng":-38.5101},{"nome":"Engenho Velho da Federação","lat":-12.9969,"lng":-38.5001},{"nome":"Vasco da Gama","lat":-12.991,"lng":-38.495},{"nome":"Horto Florestal","lat":-12.9952,"lng":-38.4804},{"nome":"Candeal","lat":-12.9914,"lng":-38.469},{"nome":"Santa Cruz","lat":-13.0002,"lng":-38.4673},{"nome":"Nordeste de Amaralina","lat":-13.0056,"lng":-38.4662},{"nome":"Chapada do Rio Vermelho","lat":-13.005,"lng":-38.4763},{"nome":"Amaralina","lat":-13.0052,"lng":-38.4618},{"nome":"Alto do Itaigara","lat":-12.9874,"lng":-38.4644},{"nome":"Cidade Jardim","lat":-12.9924,"lng":-38.4904},{"nome":"Parque da Cidade","lat":-12.995,"lng":-38.4558},{"nome":"Pituba","lat":-13.0013,"lng":-38.451},{"nome":"Itaigara","lat":-12.9952,"lng":-38.4616},{"nome":"Caminho das Árvores","lat":-12.9826,"lng":-38.4592},{"nome":"STIEP","lat":-12.9845,"lng":-38.4386},{"nome":"Costa Azul","lat":-12.9991,"lng":-38.4419},{"nome":"Imbuí","lat":-12.9659,"lng":-38.4311},{"nome":"Boca do Rio","lat":-12.9824,"lng":-38.4238},{"nome":"Jardim Armação","lat":-12.9998,"lng":-38.4308},{"nome":"Cabula/UNEB","lat":-12.9554,"lng":-38.4611},{"nome":"Pernambués","lat":-12.9733,"lng":-38.4484},{"nome":"Saramandaia","lat":-12.9689,"lng":-38.4567},{"nome":"Mata Escura","lat":-12.9305,"lng":-38.4615},{"nome":"Sussuarana","lat":-12.9278,"lng":-38.4346},{"nome":"Novo Horizonte","lat":-12.9199,"lng":-38.4197},{"nome":"São Rafael","lat":-12.9256,"lng":-38.4058},{"nome":"São Caetano","lat":-12.9344,"lng":-38.4875},{"nome":"Fazenda Grande do Retiro","lat":-12.925,"lng":-38.4757},{"nome":"Calabetão","lat":-12.9429,"lng":-38.4632},{"nome":"Campinas de Pirajá","lat":-12.9142,"lng":-38.4793},{"nome":"Pirajá","lat":-12.9025,"lng":-38.4619},{"nome":"Castelo Branco","lat":-12.9061,"lng":-38.4284},{"nome":"Castelo Branco/Águas Claras","lat":-12.884,"lng":-38.447},{"nome":"Dom Avelar","lat":-12.9167,"lng":-38.4418},{"nome":"Mussurunga/São Cristóvão","lat":-12.906,"lng":-38.378},{"nome":"Piatã","lat":-12.9442,"lng":-38.3697},{"nome":"Itapoã","lat":-12.9419,"lng":-38.3539},{"nome":"Stella Maris","lat":-12.9472,"lng":-38.3372},{"nome":"Praia do Flamengo","lat":-12.9398,"lng":-38.3189},{"nome":"Trobogy","lat":-12.956,"lng":-38.404},{"nome":"Bairro da Paz","lat":-12.918,"lng":-38.351},{"nome":"Subúrbio","lat":-12.8711,"lng":-38.4753},{"nome":"Cajazeiras","lat":-12.8986,"lng":-38.4111}];
     const LACUNAS_COBERTURA = [];
     const RAIO_AUDITORIA_METROS = 2500;
+    const MAX_LOCATION_ACCURACY_METERS = 100;
     const ATUALIZADO_EM = "2026-08-03T18:56:36-03:00";
 
     const state = {
@@ -1295,7 +1296,7 @@
       }
 
       els.locationStatus.textContent = source === 'browser'
-        ? `Localização aproximada, com precisão de ${precision.toLocaleString('pt-BR')} m. Resultados ordenados por proximidade.`
+        ? `Localização precisa, com margem de ${precision.toLocaleString('pt-BR')} m. Resultados ordenados por proximidade.`
         : `Localização definida como ${label}. Resultados ordenados por proximidade.`;
       renderResults(filteredData());
       map.flyTo(latlng, Math.max(map.getZoom(), 15), { duration: 0.8 });
@@ -1304,6 +1305,11 @@
     function showCurrentLocation(position) {
       const { latitude, longitude, accuracy } = position.coords;
       const precision = Math.max(1, Math.round(accuracy));
+      if (precision > MAX_LOCATION_ACCURACY_METERS) {
+        showManualLocationSearch();
+        els.locationStatus.textContent = `O navegador informou margem de ${precision.toLocaleString('pt-BR')} m. Para evitar uma localização incorreta, informe seu endereço ou use um dispositivo com GPS.`;
+        return;
+      }
       els.toggleLocation.disabled = false;
       els.toggleLocation.checked = true;
       els.locationModeLabel.textContent = 'Usando sua localização atual';
@@ -1344,24 +1350,6 @@
       showManualLocationSearch();
     }
 
-    function retryApproximateLocation(error, requestId) {
-      if (error.code !== 2 && error.code !== 3) {
-        locationError(error);
-        return;
-      }
-
-      els.locationModeLabel.textContent = 'Localizando aproximadamente…';
-      els.locationStatus.textContent = 'Não foi possível confirmar uma posição precisa. Tentando uma localização aproximada.';
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          if (state.locationRequestId === requestId && els.toggleLocation.checked) showCurrentLocation(position);
-        },
-        (fallbackError) => {
-          if (state.locationRequestId === requestId) locationError(fallbackError);
-        },
-        { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 }
-      );
-    }
 
     function requestCurrentLocation() {
       if (!navigator.geolocation) {
@@ -1379,9 +1367,9 @@
           if (state.locationRequestId === requestId && els.toggleLocation.checked) showCurrentLocation(position);
         },
         (error) => {
-          if (state.locationRequestId === requestId) retryApproximateLocation(error, requestId);
+          if (state.locationRequestId === requestId) locationError(error);
         },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
       );
     }
 
