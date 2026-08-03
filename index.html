@@ -598,6 +598,21 @@
       line-height: 1.3;
     }
 
+    .location-status {
+      min-height: 1.3em;
+      color: var(--muted);
+      font-size: 0.72rem;
+      line-height: 1.3;
+    }
+
+    .result-distance {
+      display: block;
+      margin-top: 3px;
+      color: #207a4c;
+      font-size: 0.66rem;
+      font-weight: 800;
+    }
+
     .marker-pin {
       width: 18px;
       height: 18px;
@@ -684,7 +699,11 @@
         <button id="fitMap" type="button">Enquadrar Salvador</button>
         <button id="toggleCoverage" type="button">Mostrar lacunas</button>
       </div>
+      <div class="toggle-row">
+        <button id="useLocation" type="button">Usar minha localização</button>
+      </div>
       <div class="coverage-status" id="coverageStatus"></div>
+      <div class="location-status" id="locationStatus" role="status" aria-live="polite"></div>
     </div>
 
     <section class="results-panel" aria-label="Resultados filtrados">
@@ -721,6 +740,9 @@
       pins: L.layerGroup(),
       coverage: L.layerGroup(),
       coverageVisible: false,
+      location: null,
+      locationMarker: null,
+      locationAccuracy: null,
       markers: L.markerClusterGroup({
         chunkedLoading: true,
         maxClusterRadius: 46,
@@ -768,6 +790,8 @@
       filterFood: document.getElementById('filterFood'),
       filterMeal: document.getElementById('filterMeal'),
       fitMap: document.getElementById('fitMap'),
+      useLocation: document.getElementById('useLocation'),
+      locationStatus: document.getElementById('locationStatus'),
       toggleCoverage: document.getElementById('toggleCoverage'),
       coverageStatus: document.getElementById('coverageStatus'),
       resultsCount: document.getElementById('resultsCount'),
@@ -987,7 +1011,10 @@
     function renderResults(data) {
       const limit = 50;
       const total = data.length;
-      const shown = data.slice(0, limit);
+      const sorted = state.location
+        ? [...data].sort((first, second) => currentDistance(first) - currentDistance(second))
+        : data;
+      const shown = sorted.slice(0, limit);
       els.resultsCount.textContent = total > limit
         ? `Visualizando ${limit.toLocaleString('pt-BR')} de ${total.toLocaleString('pt-BR')}`
         : `${total.toLocaleString('pt-BR')} ${total === 1 ? 'item' : 'itens'}`;
@@ -1002,9 +1029,14 @@
         const name = escapeHtml(item.fantasyName || item.name || 'Estabelecimento sem nome');
         const address = escapeHtml(item.address || 'Endereço não informado');
         const benefits = benefitsOf(item).map(benefitChipHtml).join('');
+        const distance = currentDistance(item);
+        const proximity = distance === null
+          ? ''
+          : `<span class="result-distance">${escapeHtml(formatDistance(distance))}</span>`;
         return `<button class="result-item" type="button" data-key="${key}">
           <span class="result-name">${name}</span>
           <span class="result-address">${address}</span>
+          ${proximity}
           <span class="result-benefits">${benefits}</span>
         </button>`;
       }).join('');
@@ -1046,6 +1078,77 @@
     function fitSalvador() {
       refreshMapSize();
       map.fitBounds(salvadorBounds, { padding: [20, 20] });
+    }
+
+    function currentDistance(item) {
+      if (!state.location) return null;
+      return distanceMeters(state.location.lat, state.location.lng, item.latitude, item.longitude);
+    }
+
+    function formatDistance(distance) {
+      if (distance < 1000) return `${Math.round(distance).toLocaleString('pt-BR')} m de você`;
+      return `${(distance / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} km de você`;
+    }
+
+    function showCurrentLocation(position) {
+      const { latitude, longitude, accuracy } = position.coords;
+      const latlng = L.latLng(latitude, longitude);
+      const precision = Math.max(1, Math.round(accuracy));
+      state.location = latlng;
+
+      if (!state.locationMarker) {
+        state.locationMarker = L.circleMarker(latlng, {
+          radius: 8,
+          color: '#0f1f1c',
+          weight: 2,
+          fillColor: '#fff8ec',
+          fillOpacity: 1
+        }).bindTooltip('Sua localização', { direction: 'top', offset: [0, -8] }).addTo(map);
+        state.locationAccuracy = L.circle(latlng, {
+          radius: precision,
+          color: '#207a4c',
+          weight: 1,
+          opacity: 0.45,
+          fillColor: '#207a4c',
+          fillOpacity: 0.08,
+          interactive: false
+        }).addTo(map);
+      } else {
+        state.locationMarker.setLatLng(latlng);
+        state.locationAccuracy.setLatLng(latlng).setRadius(precision);
+      }
+
+      els.locationStatus.textContent = `Localização aproximada, com precisão de ${precision.toLocaleString('pt-BR')} m. Resultados ordenados por proximidade.`;
+      els.useLocation.disabled = false;
+      els.useLocation.textContent = 'Atualizar minha localização';
+      renderMarkers();
+      map.flyTo(latlng, Math.max(map.getZoom(), 15), { duration: 0.8 });
+    }
+
+    function locationError(error) {
+      const messages = {
+        [error.PERMISSION_DENIED]: 'Permissão de localização negada. Permita o acesso no navegador para usar este recurso.',
+        [error.POSITION_UNAVAILABLE]: 'Sua localização não está disponível no momento. Tente novamente.',
+        [error.TIMEOUT]: 'A localização demorou demais. Tente novamente.'
+      };
+      els.locationStatus.textContent = messages[error.code] || 'Não foi possível obter sua localização.';
+      els.useLocation.disabled = false;
+      els.useLocation.textContent = 'Usar minha localização';
+    }
+
+    function requestCurrentLocation() {
+      if (!navigator.geolocation) {
+        els.locationStatus.textContent = 'Este navegador não oferece suporte à localização.';
+        return;
+      }
+      els.useLocation.disabled = true;
+      els.useLocation.textContent = 'Localizando…';
+      els.locationStatus.textContent = 'Solicitando sua localização ao navegador.';
+      navigator.geolocation.getCurrentPosition(showCurrentLocation, locationError, {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 60000
+      });
     }
 
     function renderCoverageLayer() {
@@ -1186,6 +1289,7 @@
     els.filterFood.addEventListener('click', () => { userInteracted = true; setBenefitFilter('food'); });
     els.filterMeal.addEventListener('click', () => { userInteracted = true; setBenefitFilter('meal'); });
     els.fitMap.addEventListener('click', () => { userInteracted = true; fitSalvador(); });
+    els.useLocation.addEventListener('click', () => { userInteracted = true; requestCurrentLocation(); });
     els.toggleCoverage.addEventListener('click', () => { userInteracted = true; toggleCoverageLayer(); });
     updateCoverageStatus();
 
